@@ -1,0 +1,440 @@
+#!/bin/bash
+
+###
+# Script for batch merging content to mkv files in folder by one mkvtoolnix option file
+#
+#
+#
+###
+
+
+
+###############
+### Options ###
+
+# More output information for no reason
+verbose=true
+
+# Temperary folder name
+tempFolderName="mkvtmp"
+
+
+
+######################
+### Some functions ###
+
+function readTitleFromFile {
+	local IFS=\>
+	read -d \< ENTITY CONTENT
+	local RET=$?
+	TAG_NAME=${ENTITY%% *}
+	ATTRIBUTES=${ENTITY#* }
+	return $RET
+}
+
+function readScriptFile { 
+	local IFS=""
+	read -a line
+}
+
+function readScriptString { 
+	local IFS=" "
+	read -a line
+}
+
+function getCover {
+	coverFn=$(basename -- "$1") 
+	coverEx="${coverFn##*.}"
+	coverEx="${coverEx##*( )}"
+	coverEx="${coverEx%%*( )}"
+	if [[ "$coverEx" == "jpg" || "$coverEx" == "jpeg" || "$coverEx" == "png" ]] ; then
+		coverFile="$1" ;
+	fi
+}
+
+
+
+##################
+### The Script ###
+
+st=in
+while [[ $# -gt 0 ]] ; do
+	case $1 in
+		-c |--cover)      addCover=true   ; getCover "$2" ;;
+		-e |--extension)  extension="$2"  ; shift ;;
+		-i |--inputPath)  inputPath="$2"  ; shift ;;
+		-o |--outputPath) outputPath="$2" ; shift ;; 
+		-s |--scriptFile) scriptFile="$2" ; shift ;; 
+		-t |--title)      addTitle=true   ; st=ti ;;
+		-tc| -ct)         addCover=true   ; addTitle=true ;; 
+		-v | --verbose)   verbose=true    ;;
+		-h |--help)
+			echo "`basename "$0"` - bash script for batch merging content to mkv files in folder  "
+			echo "             by only one mkvtoolnix option file. Optionaly it can use title     "
+			echo "             information from 's local .nfo metadata files.                     "
+			echo "                                                                                "
+			echo "Posible arguments:                                                              "
+			echo "    <inputPath>  path to the directory with input video files.                  "
+			echo "    <extention>  video file extension (mkv, mp4, avi, etc.) that will be used to"   
+			echo "                 find files in <inputPath> (is mkv by default if not defined).  "
+			echo "    <scriptFile> path to the option file that must be created in mkvtoolnix.    "
+			echo "    <outputPath> path to the output directory for result mkv files (is the same "
+			echo "                 directory as <inputPath> by default if not defined).           "
+			echo "                                                                                "
+			echo "Usage case #1:                                                                  " 
+			echo "    `basename "$0"` <inputPath> [<extention>] [<scriptFile>] [<outputPath>]     "
+			echo "or                                                                              "
+			echo "                                                                                "
+			echo "Usage case #2:                                                                  "
+			echo "    `basename "$0"` [options]                                                   "
+			echo "                                                                                "
+			echo "Options:                                                                        "
+			echo "    -c, --cover      [<coverFile>] add custom cover picture to the result mkv   "
+			echo "                                   files. One picture for all output files.     "
+			echo "                                   Picture file must be jpg or png format. If   "
+			echo "                                   <coverPath> is not defined picture will be   "
+			echo "                                   taken from <inputPath> folder with cover.ext "
+			echo "                                   or poster.ext filename.                      "
+			echo "    -e, --extension  <extension>                                                "
+			echo "    -i, --inputPath  <inputPath>                                                "
+			echo "    -o, --outputPath <outputPath>                                               "
+			echo "    -s, --scriptFile <scriptFile>                                               "
+			echo "    -t, --title      [<titleLine>] add custom title line to metadata of the     "
+			echo "                                   result mkv file. Title line will be appended "
+			echo "                                   with counted number of file in <inputPath>   "
+			echo "                                   like \"<titleLine> E01\". Custom title can be"
+			echo "                                   parsed from the kodi's .nfo infomation file  "
+			echo "                                   that has the same name as input video file,  "
+			echo "                                   if <titleLine> is not defined after --title  "
+			echo "                                   option.                                      " 
+			echo "    -h, --help                     for this info notice.                        "
+			echo "                                                                                "
+			echo "NOTE: Usage cases #1 and #2 can be mixed for your convenience. Only need to keep"
+			echo "      the order of the arguments of case #1 style.                              "
+			echo "      Example: `basename "$0"` <inputPath> -c -t <titleLine> <outputPath>       "
+			echo "or                                                                              "
+			echo "                                                                                "
+			echo "Usage case #3:                                                                  "
+			echo "    `basename "$0"`                without any aguments for the secret mode     "
+			exit ;;
+		*) 
+			case $st in
+				in) [ -z "$inputPath"  ] && inputPath="$1"  ; st=ex ;;
+				ex) [ -z "$extension"  ] && extension="$1"  ; st=sc ;;
+				sc) [ -z "$scriptFile" ] && scriptFile="$1" ; st=ou ;;
+				ou) [ -z "$outputPath" ] && outputPath="$1" ; st=qu ;;
+			esac
+	esac
+	if [[ $addCover = "true" ]] ; then
+		if [[ -z "$coverFile"  ]] ; then
+			continue
+		else
+			shift
+		fi
+		checkCover=false
+	fi
+	shift
+done
+
+if [[ -z "$inputPath" ]] ; then 
+	echo "No params. Use -h or --help to help"
+	while : ; do
+		read -p "Do you wish continue with the secter mode? [y/N] " yn
+		case $yn in
+			[yY] | [yY][Ee][Ss] | "")
+				inputPath=$PWD 
+				addTitle=true 
+				addCover=true
+				if [ $verbose = "true" ] ; then
+					echo "Input folder: $inputPath"
+				fi
+				break ;;
+			[nN] | [nN][Oo]) exit;;
+			*)               echo "Please answer \"y\" for \"yes\" or \"n\" for \"no\".";;
+		esac
+	done
+fi
+
+if [[ -z "$extension" ]] ; then
+	read -p "Type file extention to find [mkv]: " extension
+	extension="${extension##*( )}"
+	extension="${extension%%*( )}"
+	[ -z "$extension" ] && extension="mkv"
+	if [ $verbose = "true" ] ; then
+		echo "File extension: $extension"
+	fi
+fi
+
+tempPath="$inputPath/$tempFolderName"
+
+if [[  -d "$tempPath" ]] ; then
+	echo "Folder $tempPath is exist and can't be used as temp folder"
+	while : ; do
+		read -p "Please type a new path for temp folder [\'enter\' for exit]: " vtmpPath
+		case $vtmpPath in
+			"") exit;;
+			*)
+				tempPath="$(cd "$(dirname "$vtmpPath")"; pwd)/$(basename "$vtmpPath")"
+				if [ -z $vtmpPath || $vtmpPath = $inputPath || $tempPath = $inputPath] ; then
+					echo "Temp folder is the same as input folder."
+					continue
+				else
+					break
+				fi ;;
+		esac
+	done
+fi
+
+if [ $verbose = "true" ] ; then
+	echo "Temp folder: $tempPath"
+fi
+
+mkdir "$tempPath"
+
+if [[ -z "$outputPath" ]] ; then
+	outputPath="$inputPath"
+	echo "Оutput folder is not defined and will be the same as input folder"
+	echo "Please note that existed files will be replaced by new one"
+	while : ; do
+		read -p "Do you wish continue with replacing old files? [Y/n]" yn
+		case $yn in
+			[yY] | [yY][Ee][Ss] | "") break;;
+			[nN] | [nN][Oo])          exit;;
+			*)                        echo "Please answer \"y\" for \"yes\" or \"n\" for \"no\".";;
+		esac
+	done
+fi
+
+if [ $verbose = "true" ] ; then
+	echo "Output folder: $outputPath"
+fi
+
+if [[ -z "$scriptFile" ]] ; then
+	if [[ -f "$inputPath/script.json" ]] ; then
+		scriptFile="$inputPath/script.json"
+	elif [[ -f "$(dirname "$0")/script.json" ]] ; then
+		scriptFile="$(dirname "$0")/script.json" 
+	else 
+		echo "No script file"
+		exit;
+	fi
+	if [ $verbose = "true" ] ; then
+		echo "Script file: $scriptFile"
+	fi
+	scriptString="/usr/bin/mkvmerge "
+	while readScriptFile ; do
+		line=${line#*\"}
+		line=${line%\,}
+		line=${line%\"}
+		case $line in
+			--ui-language)     sprocess="next"  ; scriptString+="$line "   ; continue ;;
+			--output)          sprocess="next"  ; scriptString+="$line "   ; continue ;;
+			--language)        sprocess="next"  ; scriptString+="$line "   ; continue ;;
+			--track-name)      sprocess="next"  ; scriptString+="$line "   ; continue ;;
+			--default-track)   sprocess="next"  ; scriptString+="$line "   ; continue ;;
+			--forced-track)    sprocess="next"  ; scriptString+="$line "   ; continue ;;
+			--title)           sprocess="next"  ; scriptString+="$line "   ; continue ;;
+			--track-order)     sprocess="next"  ; scriptString+="$line "   ; continue ;;
+			--attachment-name) sprocess="next"  ; scriptString+="$line "   ; continue ;;
+			--sub-charset)     sprocess="next"  ; scriptString+="$line "   ; continue ;;
+			--video-tracks)    sprocess="next"  ; scriptString+="$line "   ; continue ;;
+			--audio-tracks)    sprocess="next"  ; scriptString+="$line "   ; continue ;;
+			--subtitle-tracks) sprocess="next"  ; scriptString+="$line "   ; continue ;;
+			--no-video)        sprocess="next"  ; scriptString+="$line "   ; continue ;;
+			--no-audio)        sprocess="next"  ; scriptString+="$line "   ; continue ;;
+			--no-subtitle)     sprocess="next"  ; scriptString+="$line "   ; continue ;;
+			\()                sprocess="next"  ; scriptString+="'$line' " ; continue ;;
+			\))                sprocess="next"  ; scriptString+="'$line' " ; continue ;;
+		esac
+		case $sprocess in
+			next) scriptString+="'$line' " ; continue ;;
+		esac
+	done < "$scriptFile" 
+	if [ $verbose = "true" ] ; then
+		echo "Script string: $scriptString"
+	fi
+fi
+
+if [[ $addCover = "true" ]] ; then
+	if [[ -z "$coverFile"  ]] ; then
+		if [ $verbose = "true" ] ; then
+			echo "Search for cover picture"
+		fi
+		for ext in png jpg jpeg ; do
+			if [[ -f "$inputPath/season01-poster.$ext" ]] ; then
+				cp "$inputPath/season01-poster.$ext" "$tempPath/cover.$ext"
+				useSeasonCover=true
+			elif [[ -f "$inputPath/cover.$ext" ]] ; then
+				cp "$inputPath/cover.$ext" "$tempPath/cover.$ext"
+			elif [[ -f "$inputPath/poster.$ext" ]] ; then
+				cp "$inputPath/poster.$ext" "$tempPath/cover.$ext"
+			else
+				continue
+			fi
+			coverFile="$tempPath/cover.$ext"
+			break
+		done
+		if [[ -z "$coverFile"  ]] ; then
+			echo "No Cover files found. "
+			read -p "Do you wish continue without adding a cover pictures? [y/N]" yn
+			case $yn in
+				[yY] | [yY][Ee][Ss])  break;;
+				[nN] | [nN][Oo] | "") exit;;
+				*)                    echo "Please answer \"y\" for \"yes\" or \"n\" for \"no\".";;
+			esac
+		fi
+	fi
+fi
+
+if [ $verbose = "true" ] ; then
+	echo "Cover file: $coverFile"
+fi
+
+readScriptString <<< $scriptString
+
+for entry in "$inputPath"/*."$extension" "$inputPath"/**/*."$extension" ; do
+	if [[ -f $entry ]] ; then
+		if [[ $addTitle = "true" ]] ; then
+			if [[ -f "$(dirname "$entry")/$(basename "$entry" .$extension).nfo" ]] ; then
+				while readTitleFromFile ; do
+					[[ $ENTITY = "title" ]] && title=$CONTENT && break
+				done < "$(dirname "$entry")/$(basename "$entry" .$extension).nfo"
+			else
+				echo "Unable to find files with title information. "
+				read -p "Do you wish continue without adding a title? [y/N]" yn
+				case $yn in
+					[yY] | [yY][Ee][Ss]) addTitle=false;;
+					[nN] | [nN][Oo] | "")     exit;;
+					*)                   echo "Please answer \"y\" for \"yes\" or \"n\" for \"no\".";;
+				esac
+			fi
+		fi
+		if [ ! -z "${line[0]}" ] ; then
+			mkvmergeString="${line[0]} "
+		else
+			exit
+		fi
+		for element in "${line[@]}"; do
+			if [ ! -z $element ] ; then
+				case $element in
+					--ui-language)     process="getUILanguage"     ; mkvmergeString+="$element " ; continue ;;
+					--output)          process="getOutputPath"     ; mkvmergeString+="$element " ; continue ;;
+					--language)        process="getTrackLanguage"  ; mkvmergeString+="$element " ; continue ;;
+					--track-name)      process="getTrackName"      ; mkvmergeString+="$element " ; continue ;;
+					--default-track)   process="getTrackDefault"   ; mkvmergeString+="$element " ; continue ;;
+					--forced-track)    process="getTrackForced"    ; mkvmergeString+="$element " ; continue ;;
+					--title)           process="getTitle"          ; mkvmergeString+="$element " ; continue ;;
+					--track-order)     process="getTrackOrder"     ; mkvmergeString+="$element " ; continue ;;
+					--attachment-name) process="getAttachmentName" ; mkvmergeString+="$element " ; continue ;;
+					--video-tracks)    process="getVideoTracks"    ; mkvmergeString+="$element " ; continue ;;
+					--audio-tracks)    process="getAudioTracks"    ; mkvmergeString+="$element " ; continue ;;
+					--subtitle-tracks) process="getSubtitleTracks" ; mkvmergeString+="$element " ; continue ;;
+					--no-video)        process="getNoVideo"        ; mkvmergeString+="$element " ; continue ;;
+					--no-audio)        process="getNoAudio"        ; mkvmergeString+="$element " ; continue ;;
+					--no-subtitle)     process="getNoSubtitle"     ; mkvmergeString+="$element " ; continue ;;
+					\'\(\')
+						mkvmergeString+="$element "
+						case $process in 
+							next) process="getTrackPathLine" ;  continue ;;
+						esac ;;
+					\'\)\')
+						mkvmergeString+="$element " ;;
+				esac
+				case $process in
+					getUILanguage)       mkvmergeString+="$element " ; process="next" ; continue ;;
+					getOutputPath)       mkvmergeString+="\"$tempPath/$(basename "$entry" .$extension).mkv\" " ; process="next" ; continue ;;
+					getTrackLanguage)    mkvmergeString+="$element " ; process="next" ; continue ;;
+					getTrackName)
+						trackNameString+="$element " 
+						if [[ $trackNameString = \'* ]] ; then
+							if [[ ! $element = *\' ]] ; then
+								continue
+							fi
+							trackNameString=${trackNameString#*\"}
+							trackNameString=${trackNameString%\"*}
+							trackNameString=${trackNameString#*\'}
+							trackNameString=${trackNameString%\'*}
+						fi
+						IFS=':' read -ra tt <<< $trackNameString
+						tt[1]="${tt[1]##*( )}"
+						tt[1]="${tt[1]%%*( )}"
+						if [[ ${tt[1]} = "%title%" ]] ; then
+							if [[ $addTitle = "true" ]] ; then
+								mkvmergeString+="\"${tt[0]}:$title\" "
+							else
+								mkvmergeString+="\"${tt[0]}:$(basename "$entry" .$extension)\" "
+							fi
+						else
+							mkvmergeString+="\"$trackNameString\" "
+						fi
+						trackNameString=""
+						process="next" ;;
+					getTrackDefault)     mkvmergeString+="$element " ; process="next" ; continue ;;
+					getTrackForced)      mkvmergeString+="$element " ; process="next" ; continue ;;
+					getTrackPathLine)    
+						trackPathString+="$element "
+						if [[ $trackPathString = \'* ]] ; then
+							if [[ ! $element = *\' ]] ; then
+								continue
+							fi
+							trackPathString=${trackPathString#*\'}
+							trackPathString=${trackPathString%\'*}
+						fi
+						mkvmergeString+="\"$(dirname "$trackPathString")/$(basename "$entry" .$extension).${trackPathString##*.}\" "
+						process="next" 
+						trackPathString=""; continue ;;
+					getTitle) 
+						if [[ $addTitle = "true" ]] ; then
+							mkvmergeString+="\"$title\" "
+						else
+							mkvmergeString+="$element "
+						fi
+						process="next"
+						isTitleAdded=true
+						continue ;;
+					getTrackOrder)
+						element=${element#*\"}
+						element=${element%\"*}
+						element=${element#*\'}
+						element=${element%\'*}     
+						mkvmergeString+="$element "
+						process="next"
+						continue ;;
+					getAttachmentName)   mkvmergeString+="$element " ; continue ;;
+					getVideoTracks)      mkvmergeString+="$element " ; continue ;;
+					getAudioTracks)      mkvmergeString+="$element " ; continue ;;
+					getSubtitleTracks)   mkvmergeString+="$element " ; continue ;;
+				esac
+			fi
+		done
+		if [[ $addTitle = "true" ]] && [[ $isTitleAdded != "true" ]]; then
+			mkvmergeString+="--title \"$title\" "
+		fi
+		if [[ $addCover = "true" ]] ; then
+			mkvmergeString+="--attachment-description cover "
+			mkvmergeString+="--attachment-name cover.jpg "
+			mkvmergeString+="--attachment-mime-type image/jpeg "
+			mkvmergeString+="--attach-file \"$inputPath/cover.jpg\" "
+		fi
+		eval $mkvmergeString
+		mkvmergeString=""
+		if [ -f "$tempPath/$(basename "$entry" .$extension).mkv" ] ; then
+			if [ "$outputPath" = "$inputPath" ] ; then
+				rm "$entry"
+				mv "$tempPath/$(basename "$entry" .$extension).mkv" "$(basename "$entry" .$extension).mkv"
+			fi
+		else 
+			mv "$tempPath/$(basename "$entry" .$extension).mkv" "$outputPath/$(basename "$entry" .$extension).mkv"
+		fi
+	fi
+done
+
+#if [ -f "$inputPath/cover.jpg" ] && [[ $doNotDeleteCoverFile != "true" ]] ; then
+	#rm "$inputPath/cover.jpg"
+#fi
+
+if [ -d "$tempPath" ] ; then
+	rm -r "$tempPath"
+fi
+
+
