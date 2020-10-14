@@ -1,10 +1,63 @@
 #!/bin/bash
 
 ###
-# Script for batch merging content to mkv files in folder by one mkvtoolnix option file
-#
-#
-#
+# Bash script for batch merging content to mkv files in folder by only 
+# one MKVToolNix option file. The core feature is to take additional 
+# files in other folders with same names as input files to add them in 
+# result output file. Script also don't change any information about 
+# attachments if you need put same attachment to each output file. 
+# Optionaly it can use title information from Kodi's local .nfo metadata 
+# files if they had the same name as input video files and locate in the 
+# same folder with input video files.
+#                                                                            
+# Posible arguments:                                                              
+#     <inputPath>  path to the directory with input video files.                  
+#     <extention>  video file extension (mkv, mp4, avi, etc.) that will 
+#                  be used to find files in <inputPath> (is mkv by 
+#                  default if not defined).  
+#     <scriptFile> path to the option file that must be created in 
+#                  MKVToolNix.    
+#     <outputPath> path to the output directory for result mkv files (is
+#                  the same directory as <inputPath> by default if not 
+#                  defined).           
+#                                                                                
+# Usage:                                                                  
+#     folder2mkv <inputPath> [<extention>] [<scriptFile>] [<outputPath>]     
+# or                                                                              
+#     folder2mkv [options]           
+# or
+#     folder2mkv (without any aguments for the secret mode)                                         
+#                                                                                
+# Options:                                                                        
+#     -c, --cover      [<coverFile>] add custom cover picture to the 
+#                                    result mkv files. One picture for 
+#                                    all output files. Picture file must 
+#                                    be .jpg or .png format. If 
+#                                    <coverPath> is not defined picture 
+#                                    will be taken from <inputPath> 
+#                                    folder with seasonXX-poster.**g or 
+#                                    cover.**g or poster.**g filename.                     
+#     -e, --extension  <extension>                                                
+#     -i, --inputPath  <inputPath>                                                
+#     -o, --outputPath <outputPath>                                               
+#     -s, --scriptFile <scriptFile>                                               
+#     -t, --title                    add custom title to metadata of the 
+#                                    result mkv file. Title line will be 
+#                                    replaced with name of the input 
+#                                    file. Custom title can be parsed 
+#                                    from the kodi's .nfo infomation 
+#                                    file that has the same name as 
+#                                    input video file. If add %title% to 
+#                                    any mkv track name (e.g. Video 
+#                                    track) script also change it to 
+#                                    same custom title.                               
+#     -h, --help                     for help.                        
+#                                                                                
+# NOTE: Usage cases #1 and #2 can be mixed for your convenience. Only 
+#       need to keep the order of the arguments of case #1 style.                              
+#       Example: folder2mkv <inputPath> -ct <outputPath>  
+# NOTE: -c and -t options can be mixed in -ct or -tc, but without any 
+#       <coverFile> string.     
 ###
 
 
@@ -13,7 +66,7 @@
 ### Options ###
 
 # More output information for no reason
-verbose=true
+verbose=false
 
 # Temperary folder name
 tempFolderName="mkvtmp"
@@ -69,53 +122,63 @@ while [[ $# -gt 0 ]] ; do
 		-tc| -ct)         addCover=true   ; addTitle=true ;; 
 		-v | --verbose)   verbose=true    ;;
 		-h |--help)
-			echo "`basename "$0"` - bash script for batch merging content to mkv files in folder  "
-			echo "             by only one mkvtoolnix option file. Optionaly it can use title     "
-			echo "             information from 's local .nfo metadata files.                     "
-			echo "                                                                                "
-			echo "Posible arguments:                                                              "
-			echo "    <inputPath>  path to the directory with input video files.                  "
-			echo "    <extention>  video file extension (mkv, mp4, avi, etc.) that will be used to"   
-			echo "                 find files in <inputPath> (is mkv by default if not defined).  "
-			echo "    <scriptFile> path to the option file that must be created in mkvtoolnix.    "
-			echo "    <outputPath> path to the output directory for result mkv files (is the same "
-			echo "                 directory as <inputPath> by default if not defined).           "
-			echo "                                                                                "
-			echo "Usage case #1:                                                                  " 
-			echo "    `basename "$0"` <inputPath> [<extention>] [<scriptFile>] [<outputPath>]     "
-			echo "or                                                                              "
-			echo "                                                                                "
-			echo "Usage case #2:                                                                  "
-			echo "    `basename "$0"` [options]                                                   "
-			echo "                                                                                "
-			echo "Options:                                                                        "
-			echo "    -c, --cover      [<coverFile>] add custom cover picture to the result mkv   "
-			echo "                                   files. One picture for all output files.     "
-			echo "                                   Picture file must be jpg or png format. If   "
-			echo "                                   <coverPath> is not defined picture will be   "
-			echo "                                   taken from <inputPath> folder with cover.ext "
-			echo "                                   or poster.ext filename.                      "
-			echo "    -e, --extension  <extension>                                                "
-			echo "    -i, --inputPath  <inputPath>                                                "
-			echo "    -o, --outputPath <outputPath>                                               "
-			echo "    -s, --scriptFile <scriptFile>                                               "
-			echo "    -t, --title      [<titleLine>] add custom title line to metadata of the     "
-			echo "                                   result mkv file. Title line will be appended "
-			echo "                                   with counted number of file in <inputPath>   "
-			echo "                                   like \"<titleLine> E01\". Custom title can be"
-			echo "                                   parsed from the kodi's .nfo infomation file  "
-			echo "                                   that has the same name as input video file,  "
-			echo "                                   if <titleLine> is not defined after --title  "
-			echo "                                   option.                                      " 
-			echo "    -h, --help                     for this info notice.                        "
-			echo "                                                                                "
-			echo "NOTE: Usage cases #1 and #2 can be mixed for your convenience. Only need to keep"
-			echo "      the order of the arguments of case #1 style.                              "
-			echo "      Example: `basename "$0"` <inputPath> -c -t <titleLine> <outputPath>       "
-			echo "or                                                                              "
-			echo "                                                                                "
-			echo "Usage case #3:                                                                  "
-			echo "    `basename "$0"`                without any aguments for the secret mode     "
+			echo "Bash script for batch merging content to mkv files in folder by only  "
+			echo "one MKVToolNix option file. The core feature is to take additional    "
+			echo "files in other folders with same names as input files to add them in  "
+			echo "result output file. Script also don't change any information about    "
+			echo "attachments if you need put same attachment to each output file.      "
+			echo "Optionaly it can use title information from Kodi's local .nfo metadata"
+			echo "files if they had the same name as input video files and locate in the"
+			echo "same folder with input video files.                                   "
+			echo "                                                                      "
+			echo "Posible arguments:                                                    "
+			echo "	<inputPath>  path to the directory with input video files.          "
+			echo "	<extention>  video file extension (mkv, mp4, avi, etc.) that will   "
+			echo "               be used to find files in <inputPath> (is mkv by        "
+			echo "               default if not defined).                               "
+			echo "	<scriptFile> path to the option file that must be created in        "
+			echo "               MKVToolNix.                                            "
+			echo "	<outputPath> path to the output directory for result mkv files (is  "
+			echo "               the same directory as <inputPath> by default if not    "
+			echo "               defined).                                              "
+			echo "                                                                      "
+			echo "Usage:                                                                "
+			echo "	folder2mkv <inputPath> [<extention>] [<scriptFile>] [<outputPath>]  "
+			echo "or                                                                    "
+			echo "	folder2mkv [options]                                                "
+			echo "or                                                                    "
+			echo "	folder2mkv (without any aguments for the secret mode)               "
+			echo "                                                                      "
+			echo "Options:                                                              "
+			echo "	-c, --cover      [<coverFile>] add custom cover picture to the      "
+			echo "                                 result mkv files. One picture for    "
+			echo "                                 all output files. Picture file must  "
+			echo "                                 be .jpg or .png format. If           "
+			echo "                                 <coverPath> is not defined picture   "
+			echo "                                 will be taken from <inputPath>       "
+			echo "                                 folder with seasonXX-poster.**g or   "
+			echo "                                 cover.**g or poster.**g filename.    "
+			echo "	-e, --extension  <extension>                                        "
+			echo "	-i, --inputPath  <inputPath>                                        "
+			echo "	-o, --outputPath <outputPath>                                       "
+			echo "	-s, --scriptFile <scriptFile>                                       "
+			echo "	-t, --title                    add custom title to metadata of the  "
+			echo "                                 result mkv file. Title line will be  "
+			echo "                                 replaced with name of the input      "
+			echo "                                 file. Custom title can be parsed     "
+			echo "                                 from the kodi's .nfo infomation      "
+			echo "                                 file that has the same name as       "
+			echo "                                 input video file. If add %title% to  "
+			echo "                                 any mkv track name (e.g. Video       "
+			echo "                                 track) script also change it to      "
+			echo "                                 same custom title.                   "         
+			echo "	-h, --help                     for help.                            "
+			echo "                                                                      "
+			echo "NOTE: Usage cases #1 and #2 can be mixed for your convenience. Only   "
+			echo "      need to keep the order of the arguments of case #1 style.       "
+			echo "Example: folder2mkv <inputPath> -ct <outputPath>                      "
+			echo "NOTE: -c and -t options can be mixed in -ct or -tc, but without any   "
+			echo "      <coverFile> string.                                             "
 			exit ;;
 		*) 
 			case $st in
@@ -141,7 +204,7 @@ if [[ -z "$inputPath" ]] ; then
 	while : ; do
 		read -p "Do you wish continue with the secter mode? [y/N] " yn
 		case $yn in
-			[yY] | [yY][Ee][Ss] | "")
+			[yY] | [yY][Ee][Ss])
 				inputPath=$PWD 
 				addTitle=true 
 				addCover=true
@@ -149,7 +212,7 @@ if [[ -z "$inputPath" ]] ; then
 					echo "Input folder: $inputPath"
 				fi
 				break ;;
-			[nN] | [nN][Oo]) exit;;
+			[nN] | [nN][Oo] | "") exit;;
 			*)               echo "Please answer \"y\" for \"yes\" or \"n\" for \"no\".";;
 		esac
 	done
@@ -163,50 +226,6 @@ if [[ -z "$extension" ]] ; then
 	if [ $verbose = "true" ] ; then
 		echo "File extension: $extension"
 	fi
-fi
-
-tempPath="$inputPath/$tempFolderName"
-
-if [[  -d "$tempPath" ]] ; then
-	echo "Folder $tempPath is exist and can't be used as temp folder"
-	while : ; do
-		read -p "Please type a new path for temp folder [\'enter\' for exit]: " vtmpPath
-		case $vtmpPath in
-			"") exit;;
-			*)
-				tempPath="$(cd "$(dirname "$vtmpPath")"; pwd)/$(basename "$vtmpPath")"
-				if [ -z $vtmpPath || $vtmpPath = $inputPath || $tempPath = $inputPath] ; then
-					echo "Temp folder is the same as input folder."
-					continue
-				else
-					break
-				fi ;;
-		esac
-	done
-fi
-
-if [ $verbose = "true" ] ; then
-	echo "Temp folder: $tempPath"
-fi
-
-mkdir "$tempPath"
-
-if [[ -z "$outputPath" ]] ; then
-	outputPath="$inputPath"
-	echo "Оutput folder is not defined and will be the same as input folder"
-	echo "Please note that existed files will be replaced by new one"
-	while : ; do
-		read -p "Do you wish continue with replacing old files? [Y/n]" yn
-		case $yn in
-			[yY] | [yY][Ee][Ss] | "") break;;
-			[nN] | [nN][Oo])          exit;;
-			*)                        echo "Please answer \"y\" for \"yes\" or \"n\" for \"no\".";;
-		esac
-	done
-fi
-
-if [ $verbose = "true" ] ; then
-	echo "Output folder: $outputPath"
 fi
 
 if [[ -z "$scriptFile" ]] ; then
@@ -253,6 +272,50 @@ if [[ -z "$scriptFile" ]] ; then
 	if [ $verbose = "true" ] ; then
 		echo "Script string: $scriptString"
 	fi
+fi
+
+tempPath="$inputPath/$tempFolderName"
+
+if [[  -d "$tempPath" ]] ; then
+	echo "Folder $tempPath is exist and can't be used as temp folder"
+	while : ; do
+		read -p "Please type a new path for temp folder [\'enter\' for exit]: " vtmpPath
+		case $vtmpPath in
+			"") exit;;
+			*)
+				tempPath="$(cd "$(dirname "$vtmpPath")"; pwd)/$(basename "$vtmpPath")"
+				if [ -z $vtmpPath || $vtmpPath = $inputPath || $tempPath = $inputPath] ; then
+					echo "Temp folder is the same as input folder."
+					continue
+				else
+					break
+				fi ;;
+		esac
+	done
+fi
+
+if [ $verbose = "true" ] ; then
+	echo "Temp folder: $tempPath"
+fi
+
+mkdir "$tempPath"
+
+if [[ -z "$outputPath" ]] ; then
+	outputPath="$inputPath"
+	echo "Оutput folder is not defined and will be the same as input folder"
+	echo "Please note that existed files will be replaced by new one"
+	while : ; do
+		read -p "Do you wish continue with replacing old files? [Y/n]" yn
+		case $yn in
+			[yY] | [yY][Ee][Ss] | "") break;;
+			[nN] | [nN][Oo])          exit;;
+			*)                        echo "Please answer \"y\" for \"yes\" or \"n\" for \"no\".";;
+		esac
+	done
+fi
+
+if [ $verbose = "true" ] ; then
+	echo "Output folder: $outputPath"
 fi
 
 if [[ $addCover = "true" ]] ; then
@@ -412,9 +475,20 @@ for entry in "$inputPath"/*."$extension" "$inputPath"/**/*."$extension" ; do
 		fi
 		if [[ $addCover = "true" ]] ; then
 			mkvmergeString+="--attachment-description cover "
-			mkvmergeString+="--attachment-name cover.jpg "
-			mkvmergeString+="--attachment-mime-type image/jpeg "
-			mkvmergeString+="--attach-file \"$inputPath/cover.jpg\" "
+			mkvmergeString+="--attachment-name $(basename "$coverFile") "
+			coverFn=$(basename "$coverFile")
+			coverEx="${coverFn##*.}"
+			coverEx="${coverEx##*( )}"
+			coverEx="${coverEx%%*( )}"
+			if [ $coverEx = "jpeg" ||  $coverEx = "jpg" ] ; then
+				mkvmergeString+="--attachment-mime-type image/jpeg "
+			elif [ $coverEx = "png" ] ; then
+				mkvmergeString+="--attachment-mime-type image/png "
+			else
+				echo "Something is wrong with cover picture, man"
+				exit
+			fi
+			mkvmergeString+="--attach-file \"$coverFile\" "
 		fi
 		eval $mkvmergeString
 		mkvmergeString=""
